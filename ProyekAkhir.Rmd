@@ -1,0 +1,150 @@
+---
+title: "Proyek Akhir"
+author: "Shean Michael/Muhammad Khadafie"
+date: "11/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Adding Library
+```{r}
+library(SentimentAnalysis)
+library(plyr)
+library(ggplot2)
+library(RColorBrewer)
+library(wordcloud2)
+library(syuzhet)
+library(tm)
+library(dplyr)
+library(tidymodels)
+library(vroom)
+library(here)
+library(tidytext)
+library(DT)
+library(markdown)
+library(shiny)
+
+```
+Menentukan sentimen dari polarity
+```{r}
+dataCsv = read.csv(file="Climate_twitter.csv", header=TRUE)
+dataCsv <- dataCsv %>%
+    mutate(Sentimen = case_when(
+        polarity < 0 ~ "Negatif",
+        polarity <= 0 ~ "Netral",
+        polarity > 0 ~ "Positif"))
+data_sentiment <- dataCsv[,c(7,15)]
+View(data_sentiment)
+
+```
+
+
+Emotion on each twitter account commentary
+```{r}
+dataCsv = read.csv(file="Climate_twitter.csv", header=TRUE)
+tidy_climate = dataCsv %>%
+  filter(text != "nan") %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words)
+
+climate_nrc = tidy_climate %>% 
+  inner_join(get_sentiments("nrc")) %>%
+  group_by(twitter_name) %>%
+  count(sentiment, sort = TRUE) %>%
+  spread(sentiment, n, fill = 0) %>%
+  ungroup()
+colSums(climate_nrc[,-1])
+```
+
+```{r}
+data_twitter = read.csv("climate_twitter.csv")
+tweets = as.character(data_twitter$text)
+sentimen = get_nrc_sentiment(tweets)
+tweet_sentiment = cbind(data_twitter$text,sentimen)
+par(mar=rep(3,4))
+barplot(
+  colSums(sentimen),
+  col=rainbow(10),
+  ylab='count',
+  main='Sentiment Analysis'
+  )
+```
+
+
+
+Barplot
+```{r}
+dataCsv = read.csv(file="Climate_twitter.csv", header=TRUE)
+data_climate = as.factor(dataCsv$text)
+corpus = Corpus(VectorSource(data_climate))
+tdm = TermDocumentMatrix(corpus)
+tdm = removeSparseTerms(tdm, sparse = 0.98)
+tdm = as.matrix(tdm)
+
+w = sort(rowSums(tdm), decreasing = T)
+barplot(w[1:10],
+        las = 2,
+        main = "Words Frequency",
+        col=c("#03045e", "#023e8a", "#0077b6", "#0096c7", "#00b4d8" ,"#48cae4" ,"#90e0ef", "#ade8f4","#caf0f8", "#ffffff"))
+
+```
+
+WordCloud
+```{r}
+dataCsv <- read.csv(file="Climate_twitter.csv", header=TRUE)
+csv.corpus <- Corpus(VectorSource(dataCsv$text))
+tdm = TermDocumentMatrix(csv.corpus) %>%
+    as.matrix()
+words = sort(rowSums(tdm), decreasing = TRUE)
+df = data.frame(word=names(words), freq=words)
+print(wordcloud2(df, size = .5))
+```
+
+```{r}
+ui <- fluidPage(
+  titlePanel("Tweets Climate Change"),
+  mainPanel(
+    tabsetPanel(type = "tabs",
+                tabPanel("Data Twitter", DT::dataTableOutput('data')), 
+                tabPanel("Sentiment Analysis", DT::dataTableOutput('sentiment')), 
+                tabPanel("Sentiment Barplot", plotOutput('sentimentbar')), 
+                tabPanel("Frequency Words", plotOutput('freqword')), 
+                tabPanel("Wordcloud", wordcloud2Output("Wordcloud")) 
+    )
+  )
+)
+
+server <- function(input, output) {
+  output$data <- DT::renderDataTable({
+    DT::datatable(data_twitter, options = list(lengthChange = FALSE))
+  })
+  
+  output$sentiment <- DT::renderDataTable({
+    DT::datatable(data_sentiment, options = list(lengthChange = FALSE))
+  })
+  
+ output$sentimentbar <- renderPlot({
+  barplot(
+        colSums(sentimen),
+        col=rainbow(10),
+        ylab='count',
+        main='Sentiment Analysis'
+  )
+  })
+ 
+ output$freqword <- renderPlot({
+ barplot(w[1:10],
+        las = 2,
+        main = "Words Frequency",
+        col=c("#03045e", "#023e8a", "#0077b6", "#0096c7", "#00b4d8" ,"#48cae4" ,"#90e0ef", "#ade8f4","#caf0f8", "#ffffff"))
+  })
+ 
+ output$Wordcloud <- renderWordcloud2({
+        wordcloud2(df, size = .5)
+ })
+}
+print(shinyApp(ui = ui, server = server))
+```
